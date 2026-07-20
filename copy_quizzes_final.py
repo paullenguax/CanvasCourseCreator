@@ -2,6 +2,8 @@
 import requests
 import time
 import getpass
+import re
+import html as html_module
 
 # === CONFIG ===
 CANVAS_URL = "https://courses.lenguax.com"
@@ -10,6 +12,20 @@ ACCESS_TOKEN = getpass.getpass("🔑 Enter your Canvas API token (input hidden):
 headers = {
     "Authorization": f"Bearer {ACCESS_TOKEN}"
 }
+
+def html_to_plain_text(value):
+    # Question feedback fields display whatever string is written to them
+    # verbatim - Canvas does not render markup in them - so raw HTML (as stored
+    # in the *_html variants) shows up as literal tag soup. Strip it to plain text.
+    if not value:
+        return value
+    text = re.sub(r'(?i)<br\s*/?>', '\n', value)
+    text = re.sub(r'(?i)</p\s*>', '\n\n', text)
+    text = re.sub(r'<[^>]+>', '', text)
+    text = html_module.unescape(text)
+    text = text.replace('\xa0', ' ')
+    text = re.sub(r' +', ' ', text)
+    return text.strip()
 
 def get_quizzes(course_id):
     print(f"📥 Fetching quizzes from course {course_id}...")
@@ -59,14 +75,15 @@ def create_question(course_id, quiz_id, question):
     }
 
     # Question-level feedback (shown for correct/incorrect/any answer) - verified to
-    # persist correctly via the API, unlike per-answer comments below. Prefer the
-    # _html variant since rich-text feedback is stored there with the plain field left
-    # blank.
+    # persist correctly via the API, unlike per-answer comments below. Rich-text
+    # feedback is stored in the _html variant with the plain field left blank, but
+    # Canvas displays whatever we write here as literal text (no markup rendering),
+    # so convert HTML down to plain text rather than copying tags verbatim.
     for field in ("correct_comments", "incorrect_comments", "neutral_comments"):
         html_value = question.get(f"{field}_html")
         plain_value = question.get(field)
         if html_value:
-            data["question"][field] = html_value
+            data["question"][field] = html_to_plain_text(html_value)
         elif plain_value:
             data["question"][field] = plain_value
 
