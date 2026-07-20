@@ -58,6 +58,12 @@ def create_question(course_id, quiz_id, question):
         }
     }
 
+    # Question-level feedback (shown for correct/incorrect/any answer) - verified to
+    # persist correctly via the API, unlike per-answer comments below.
+    for field in ("correct_comments", "incorrect_comments", "neutral_comments"):
+        if question.get(field):
+            data["question"][field] = question[field]
+
     if "answers" in question and question["answers"]:
         data["question"]["answers"] = []
         for answer in question["answers"]:
@@ -66,20 +72,24 @@ def create_question(course_id, quiz_id, question):
                 "answer_weight": answer.get("weight", 0),
             }
 
-            # Add comments if present
-            if answer.get("comments_html"):
-                answer_data["answer_comments"] = answer["comments_html"]
-            elif answer.get("comments"):
-                answer_data["answer_comments"] = answer["comments"]
+            # NOTE: per-answer comments (answer_comments) do NOT persist via this API -
+            # verified empirically (POST and PUT both return 200 but the comment never
+            # shows up, even in the Canvas UI). This is a real Canvas platform
+            # limitation, not a request-format issue, so we don't attempt it.
 
             # Matching question support with correct field names
             if qtype == "matching_question":
-                if answer.get("match_left"):
-                    answer_data["answer_match_left"] = answer["match_left"]
-                if answer.get("match_right"):
-                    answer_data["answer_match_right"] = answer["match_right"]
+                if answer.get("left"):
+                    answer_data["answer_match_left"] = answer["left"]
+                if answer.get("right"):
+                    answer_data["answer_match_right"] = answer["right"]
 
             data["question"]["answers"].append(answer_data)
+
+        # Distractor pool for matching questions lives on the question, not per-answer
+        if qtype == "matching_question" and question.get("matching_answer_incorrect_matches"):
+            if data["question"]["answers"]:
+                data["question"]["answers"][0]["matching_answer_incorrect_matches"] = question["matching_answer_incorrect_matches"]
 
     try:
         print(f"   🚀 Posting question to Canvas...")
