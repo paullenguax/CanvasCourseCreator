@@ -59,10 +59,16 @@ def create_question(course_id, quiz_id, question):
     }
 
     # Question-level feedback (shown for correct/incorrect/any answer) - verified to
-    # persist correctly via the API, unlike per-answer comments below.
+    # persist correctly via the API, unlike per-answer comments below. Prefer the
+    # _html variant since rich-text feedback is stored there with the plain field left
+    # blank.
     for field in ("correct_comments", "incorrect_comments", "neutral_comments"):
-        if question.get(field):
-            data["question"][field] = question[field]
+        html_value = question.get(f"{field}_html")
+        plain_value = question.get(field)
+        if html_value:
+            data["question"][field] = html_value
+        elif plain_value:
+            data["question"][field] = plain_value
 
     if "answers" in question and question["answers"]:
         data["question"]["answers"] = []
