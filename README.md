@@ -12,6 +12,11 @@ Supports question types including multiple choice, true/false, and matching ques
 
 - `copy_quizzes_final.py` — the main script to use
 - `copy_quizzes.py` — earlier version
+- `debug_matching_question.py` — dumps raw JSON for a matching question, useful when Canvas's API shape needs re-checking
+- `debug_answer_comments_scan.py` — scans a course for per-answer comments that can't be copied (see below), independent of a copy run
+- `debug_migration_issues.py` / `debug_migration_detail.py` — inspect a course's content_migrations history and logged issues (useful for diagnosing why a native Canvas course copy dropped content)
+- `debug_diff_quizzes.py` — diffs quiz titles between a source and target course to see exactly what's missing
+- `native_copy_quizzes.py` — triggers a real, targeted Canvas content migration (`select[quizzes]`) instead of reconstructing questions via the API. **Currently non-functional on this account** - see "Why this script exists" below - kept in case Instructure ever fixes the underlying bug, since native copy would have full fidelity (including per-answer comments, which `copy_quizzes_final.py` cannot copy).
 
 ## Usage
 
@@ -28,6 +33,27 @@ You will be prompted for:
 ## Canvas instance
 
 Configured to connect to `https://courses.lenguax.com`
+
+## Why this script exists
+
+Quizzes copied via Canvas's own "Copy this Course" feature sometimes never
+arrive in the target course, with **no error shown anywhere**. Confirmed with
+two separate real content_migrations on this account:
+
+- Migration 59 (course 34 → 40, full "copy everything" course copy): completed,
+  0 issues logged, but 0 of the source's 16 quizzes appeared in the target.
+- Migration 60 (course 34 → 40, a fresh migration using `select[quizzes]` to
+  target *only* the 16 quizzes, nothing else): also completed, 0 issues logged,
+  still 0 quizzes delivered.
+
+Since a scoped, quizzes-only migration fails identically to a full copy, this
+rules out a selection mistake or anything fixable via migration parameters -
+it's a genuine bug in Canvas's quiz-copy pipeline on this account/instance. The
+right long-term fix is an Instructure support ticket referencing migrations 59
+and 60 on course 40 as reproducible evidence. Until/unless that's resolved,
+`copy_quizzes_final.py` (reconstructing quizzes question-by-question via the
+API) is the working path, with the known limitation that per-answer comments
+cannot be copied by any means found so far (see below).
 
 ## Known Canvas API quirks (verified empirically, not just from docs)
 
