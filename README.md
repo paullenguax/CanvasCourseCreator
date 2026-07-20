@@ -48,7 +48,15 @@ Configured to connect to `https://courses.lenguax.com`
   POST and a follow-up PUT (JSON and form-encoded, referencing existing answer
   IDs) were tried and failed. This is a real Canvas platform limitation, not a
   request-format bug - don't re-investigate this without new evidence Canvas
-  changed something.
+  changed something. The script prints a "MANUAL FOLLOW-UP NEEDED" list at the
+  end of the run with every skipped comment (quiz, question ID, text) so they
+  can be re-typed by hand in the target course - `debug_answer_comments_scan.py`
+  can also scan a course for these independently of a copy run.
+- `correct_comments` / `incorrect_comments` / `neutral_comments` are copied as
+  plain text (HTML tags stripped) rather than verbatim HTML - Canvas displays
+  whatever is written to these fields literally rather than rendering markup,
+  so copying raw `<p>...</p>` source content produces visible tag soup in the
+  UI.
 - Quizzes are always created **unpublished** in the target course; publish them
   manually after copying.
 - The script has no dedup/upsert logic - re-running it against a target course

@@ -65,6 +65,16 @@ def create_question(course_id, quiz_id, question):
     qtype = question["question_type"]
     print(f"   📝 Question type: {qtype}")
 
+    # Per-answer comments ("if student chooses this answer" feedback) cannot be
+    # written via this API - verified empirically, see README. Collect any found
+    # in the source so they can be reported for manual re-entry instead of
+    # silently vanishing.
+    skipped_comments = set()
+    for answer in question.get("answers", []):
+        comment_text = answer.get("comments_html") or answer.get("comments")
+        if comment_text:
+            skipped_comments.add(html_to_plain_text(comment_text))
+
     data = {
         "question": {
             "question_name": question.get("question_name", ""),
@@ -95,11 +105,6 @@ def create_question(course_id, quiz_id, question):
                 "answer_weight": answer.get("weight", 0),
             }
 
-            # NOTE: per-answer comments (answer_comments) do NOT persist via this API -
-            # verified empirically (POST and PUT both return 200 but the comment never
-            # shows up, even in the Canvas UI). This is a real Canvas platform
-            # limitation, not a request-format issue, so we don't attempt it.
-
             # Matching question support with correct field names
             if qtype == "matching_question":
                 if answer.get("left"):
@@ -127,12 +132,16 @@ def create_question(course_id, quiz_id, question):
         print(f"   ❌ Failed to create question: {e}")
         print(f"   Response: {e.response.text}")
 
+    return skipped_comments
+
 def copy_all_quizzes():
     source_course_id = input("Enter the source (master) course ID: ").strip()
     target_course_id = input("Enter the target course ID: ").strip()
 
     quizzes = get_quizzes(source_course_id)
     print(f"🎯 Found {len(quizzes)} quizzes to copy.\n")
+
+    manual_followup = []
 
     for quiz in quizzes:
         print(f"🔄 Processing quiz: {quiz['title']}")
@@ -141,10 +150,17 @@ def copy_all_quizzes():
         print(f"   📊 Found {len(original_questions)} questions to copy")
 
         for q in original_questions:
-            create_question(target_course_id, new_quiz["id"], q)
+            skipped_comments = create_question(target_course_id, new_quiz["id"], q)
+            for comment in skipped_comments:
+                manual_followup.append((quiz["title"], q["id"], comment))
 
         print(f"✅ Completed quiz: {quiz['title']}\n")
         time.sleep(1)
+
+    if manual_followup:
+        print("\n⚠️  MANUAL FOLLOW-UP NEEDED - per-answer comments can't be copied by this API:")
+        for quiz_title, question_id, comment in manual_followup:
+            print(f"   - Quiz '{quiz_title}', question {question_id}: {comment}")
 
 if __name__ == "__main__":
     copy_all_quizzes()
