@@ -34,26 +34,56 @@ You will be prompted for:
 
 Configured to connect to `https://courses.lenguax.com`
 
-## Why this script exists
+## Why this script exists - INVESTIGATION IN PROGRESS (paused 2026-07-20)
 
 Quizzes copied via Canvas's own "Copy this Course" feature sometimes never
-arrive in the target course, with **no error shown anywhere**. Confirmed with
-two separate real content_migrations on this account:
+arrive in the target course, with **no error shown anywhere**. This Canvas
+instance is self-hosted on a DigitalOcean droplet (`Canvas-LX`, Rails app at
+`/var/canvas`, connect via the DigitalOcean web console at
+`cloud.digitalocean.com/droplets/473094510/terminal/ui/?os_user=root` - no
+local SSH key set up for it), so - unlike a normal Instructure-hosted
+account - a broken/misconfigured install is a real, fixable possibility here,
+not just an upstream Canvas bug to file a ticket about.
 
-- Migration 59 (course 34 → 40, full "copy everything" course copy): completed,
-  0 issues logged, but 0 of the source's 16 quizzes appeared in the target.
-- Migration 60 (course 34 → 40, a fresh migration using `select[quizzes]` to
-  target *only* the 16 quizzes, nothing else): also completed, 0 issues logged,
-  still 0 quizzes delivered.
+**Status of the investigation:**
 
-Since a scoped, quizzes-only migration fails identically to a full copy, this
-rules out a selection mistake or anything fixable via migration parameters -
-it's a genuine bug in Canvas's quiz-copy pipeline on this account/instance. The
-right long-term fix is an Instructure support ticket referencing migrations 59
-and 60 on course 40 as reproducible evidence. Until/unless that's resolved,
-`copy_quizzes_final.py` (reconstructing quizzes question-by-question via the
-API) is the working path, with the known limitation that per-answer comments
-cannot be copied by any means found so far (see below).
+- Migration 59 (course 34 → 40, a genuine full "copy everything" course copy -
+  confirmed via server log: `settings` included `everything: true,
+  overwrite_quizzes: true`): completed, 0 issues logged, but 0 of the source's
+  16 quizzes appeared in the target. **This is still unexplained and is real
+  evidence of *something* wrong** - it wasn't run by any of our own scripts.
+- Migration 60 (an attempt to test a scoped `select[quizzes]`-only migration
+  via `native_copy_quizzes.py`): also showed 0 quizzes delivered, and was
+  initially treated as confirming the same bug independent of full-copy
+  scope. **That conclusion was wrong.** The server log for migration 60 shows
+  its settings only captured a single quiz id (`quizzes: '461'`, the last one
+  in the list) instead of all 16 - because the script sent repeated
+  `select[quizzes]=<id>` form fields without the trailing `[]`, and Rails'
+  param parser treats repeated non-bracketed keys as overwriting a scalar
+  (last value wins), not accumulating an array. **Migration 60 is not valid
+  evidence of anything** - it tested a broken request, not Canvas's real
+  behavior. This has been fixed in `native_copy_quizzes.py` (now sends
+  `select[quizzes][]`) but **the fix has not been re-tested yet** - the
+  target course (40) was deleted before the retry happened.
+
+**Next step when picking this back up:** re-run `native_copy_quizzes.py`
+(source 34, into a fresh target course) with the corrected `[]` syntax and see
+whether a properly-formed scoped migration actually succeeds. If it does,
+that's a real fix going forward (full fidelity, including per-answer
+comments, which `copy_quizzes_final.py` cannot copy) and points to something
+specific about full "everything" copies being the broken path. If it still
+fails with 0 quizzes delivered even with correct syntax, *that* would be solid
+evidence of a genuine install-level problem worth digging into further on the
+droplet itself (e.g. checking the `canvas_init.service` unit - currently
+failed, though likely just a redundant legacy `script/delayed_job` wrapper
+colliding with the already-running `canvas-delayed-job.service`, not
+necessarily the cause - or comparing gem versions against the Canvas release
+this instance claims to run).
+
+Until this is resolved either way, `copy_quizzes_final.py` (reconstructing
+quizzes question-by-question via the classic Quiz Questions API) is the
+working fallback, with the known limitation that per-answer comments cannot
+be copied by any means found so far (see below).
 
 ## Known Canvas API quirks (verified empirically, not just from docs)
 

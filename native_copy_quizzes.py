@@ -33,7 +33,12 @@ def main():
         data={
             "migration_type": "course_copy_importer",
             "settings[source_course_id]": source_id,
-            "select[quizzes]": quiz_ids,
+            # NOTE: the trailing [] is required - without it, Rails' param parser
+            # treats repeated "select[quizzes]" keys as overwriting a single scalar
+            # (last value wins) instead of building an array. Confirmed via server
+            # log: the previous run without [] only captured one quiz id ("461")
+            # instead of all of them, which is why nothing came through.
+            "select[quizzes][]": quiz_ids,
         }
     )
     resp.raise_for_status()
